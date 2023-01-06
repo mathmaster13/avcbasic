@@ -121,7 +121,7 @@ done
 ### ASM
 `ASM` takes in a string of assembly and emits it verbatim to the output file.
 There are no sanity checks for assembly, so use this with caution.
-See (a2asm)[https://github.com/ambyshframber/a2asm) for ASM syntax.
+See [a2asm](https://github.com/ambyshframber/a2asm) for ASM syntax.
 
 Example:
 ```
@@ -135,11 +135,13 @@ Remember that code in a macro definition is not run until the macro is invoked.
 Example:
 ```
 // defining and calling an ASM macro containing avcbasic
-ASM ".defmac(printNewline, (), (" // define macro
-PRINT "" // this code is not run until the macro is invoked
+ASM ".defmac(printNewlineTwice, (), (" // define macro
+// this code is not run until the macro is invoked
+PRINT ""
+PRINT ""
 ASM "))" // end macro definition
 
-ASM "%printNewline"
+ASM "%printNewlineTwice" // calls PRINT "" twice
 ```
 
 # Formal Grammar
