@@ -1,6 +1,6 @@
 package io.github.mathmaster13.avcbasic
 
-class Parser(val tokens: TokenList) {
+class Parser(private val tokens: TokenList) {
     var index = 0 // All functions move the index to the next unprocessed token upon completion.
     fun parse(): Ast.Program {
         val ast = Ast.Program(AstList())
@@ -14,6 +14,7 @@ class Parser(val tokens: TokenList) {
         }
         return ast
     }
+
     private fun labeledStatement(): Ast.LabeledStatement = Ast.LabeledStatement(labelDirective(), statement())
     private fun labelDirective(): Ast.LabelDirective? {
         val label = tokens[index]
@@ -23,6 +24,7 @@ class Parser(val tokens: TokenList) {
         }
         return null
     }
+
     private fun statement(): Ast {
         val keyword = tokens[index]
         if (keyword !is Token.Keyword) parseError("Statements must start with a keyword.")
@@ -38,8 +40,10 @@ class Parser(val tokens: TokenList) {
             Token.Keyword.GOSUB -> gotoStatement(true)
             Token.Keyword.INPUT -> Ast.InputStatement(varList())
             Token.Keyword.LET -> assignStatement()
+            Token.Keyword.END -> Ast.EndStatement
         }
     }
+
     private fun expressionList(): AstList {
         val output = AstList()
         var nextToken = tokens[index]
@@ -51,7 +55,7 @@ class Parser(val tokens: TokenList) {
             } else output.add(expression())
             nextToken = tokens[index]
         }
-        
+
         checkNext()
         while (nextToken == Token.Comma) {
             index++
@@ -60,6 +64,7 @@ class Parser(val tokens: TokenList) {
         }
         return output
     }
+
     private fun expression(): Ast {
         var nextToken = tokens[index]
         val unaryOp: Token.ArithmeticOp?
@@ -79,7 +84,7 @@ class Parser(val tokens: TokenList) {
         while (nextToken is Token.ArithmeticOp) {
             var op: Token.ArithmeticOp
             when (nextToken) {
-                Token.ArithmeticOp.MULTIPLY, Token.ArithmeticOp.DIVIDE -> parseError("An unknown error occurred: Recieved * or / in expression()")
+                Token.ArithmeticOp.MULTIPLY, Token.ArithmeticOp.DIVIDE -> parseError("An unknown error occurred: Received * or / in expression()")
                 else -> run {
                     op = nextToken as Token.ArithmeticOp
                     index++
@@ -90,6 +95,7 @@ class Parser(val tokens: TokenList) {
         }
         return output
     }
+
     private fun term(): Ast {
         var output: Ast = factor()
         var nextToken = tokens[index]
@@ -107,7 +113,8 @@ class Parser(val tokens: TokenList) {
         }
         return output
     }
-    fun factor(): Ast {
+
+    private fun factor(): Ast {
         val output = when (val nextToken = tokens[index]) {
             is Token.ID -> Ast.Var(nextToken)
             is Token.Number -> Ast.Num(nextToken.value)
@@ -123,12 +130,14 @@ class Parser(val tokens: TokenList) {
             maybeOutput
         }
     }
+
     private fun gotoStatement(subroutine: Boolean): Ast.GotoStatement {
         val label = tokens[index]
         if (label !is Token.Label) parseError("GOTO and GOSUB require that they are followed by a label.")
         index++
         return Ast.GotoStatement(label, subroutine)
     }
+
     private fun ifStatement(): Ast.IfStatement {
         val left = try {
             expression()
@@ -147,13 +156,14 @@ class Parser(val tokens: TokenList) {
         index++
         return Ast.IfStatement(relOpAst, labeledStatement())
     }
+
     private fun varList(): ArrayList<Token.ID> {
         val output = ArrayList<Token.ID>()
         var nextToken = tokens[index]
         if (nextToken !is Token.ID) parseError("INPUT must take one or more variables separated by commas.")
         output.add(nextToken)
         index++
-        
+
         nextToken = tokens[index]
         while (nextToken == Token.Comma) {
             index++
@@ -165,6 +175,7 @@ class Parser(val tokens: TokenList) {
         }
         return output
     }
+
     private fun assignStatement(): Ast.AssignStatement {
         val id = tokens[index]
         if (id !is Token.ID) parseError("The LET keyword must be followed by a variable name.")
@@ -177,15 +188,17 @@ class Parser(val tokens: TokenList) {
             parseError("A variable declaration must contain an expression after the equal sign.")
         }
     }
+
     private fun asmDirective(): Ast.AsmDirective {
         val str = tokens[index]
         if (str !is Token.Str) parseError("ASM directives must be followed by a string of assembly code.")
         index++
         return Ast.AsmDirective(str.value)
     }
-    
+
     @Suppress("NOTHING_TO_INLINE")
-    private inline fun parseError(message: String, idx: Int = index): Nothing = throw ParseError("$message\nDebug Info:\nToken List: $tokens\nIndex: $idx")
+    private inline fun parseError(message: String, idx: Int = index): Nothing =
+        throw ParseError("$message\nDebug Info:\nToken List: $tokens\nIndex: $idx")
 }
 
 class ParseError(message: String? = null) : RuntimeException(message)

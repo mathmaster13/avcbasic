@@ -11,6 +11,7 @@ class Lexer(private var code: String) {
                 val split = newline.split(code, 2)
                 if (split.size > 1) {
                     code = split[1]
+                    @Suppress("RecursivePropertyAccessor")
                     return nextToken
                 }
                 return add(Token.EOF)
@@ -23,15 +24,18 @@ class Lexer(private var code: String) {
             }
             throw LexerError("The lexer has detected invalid code:\n$code")
         }
-    @Suppress("NOTHING_TO_INLINE")
+
+    @Suppress("NOTHING_TO_INLINE", "ControlFlowWithEmptyBody")
     inline fun scanAll() {
         while (nextToken != Token.EOF) {}
     }
+
     @Suppress("NOTHING_TO_INLINE")
     private inline fun <T> add(t: Token<T>): Token<T> {
         tokens.add(t)
         return t
     }
+
     companion object {
         val newline = Regex("\r?\n|\r")
     }

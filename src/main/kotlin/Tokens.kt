@@ -2,10 +2,11 @@ package io.github.mathmaster13.avcbasic
 
 /**
  * A very fancy token ADT.
- */ 
+ */
+// TODO merge all the regex-related factories together
 sealed interface Token<T> {
     val value: T
-    
+
     data class Number(override val value: Short) : Token<Short> {
         companion object : TokenFactory<Number> {
             private val regex = Regex("[0-9]+")
@@ -16,17 +17,21 @@ sealed interface Token<T> {
             }
         }
     }
+
     enum class ArithmeticOp(val isUnary: Boolean, val operation: (Short, Short) -> Short) : Token<ArithmeticOp> {
-        ADD(true, { p: Short, q: Short -> (p + q).toShort() }), SUBTRACT(true, { p: Short, q: Short -> (p - q).toShort() }),
-        MULTIPLY(false, { p: Short, q: Short -> (p * q).toShort() }), DIVIDE(false, { p: Short, q: Short -> (p / q).toShort() });
-        
+        ADD(true, { p: Short, q: Short -> (p + q).toShort() }),
+        SUBTRACT(true, { p: Short, q: Short -> (p - q).toShort() }),
+        MULTIPLY(false, { p: Short, q: Short -> (p * q).toShort() }),
+        DIVIDE(false, { p: Short, q: Short -> (p / q).toShort() });
+
         override val value = this
-        
+
         companion object : TokenFactory<ArithmeticOp> {
             override fun tryGet(input: String): Pair<String, ArithmeticOp>? {
                 val op = ArithmeticOp.fromChar(input[0]) ?: return null
                 return Pair(input.substring(1).trim(), op)
             }
+
             private fun fromChar(input: Char) = when (input) {
                 '+' -> ADD
                 '-' -> SUBTRACT
@@ -36,40 +41,44 @@ sealed interface Token<T> {
             }
         }
     }
+
     enum class Keyword : Token<Keyword> {
-        PRINT, IF, THEN, GOTO, INPUT, LET, GOSUB, RETURN, RND, ASM;
-        
+        PRINT, IF, THEN, GOTO, INPUT, LET, GOSUB, RETURN, END, RND, ASM;
+
         override val value = this
-        
+
         companion object : TokenFactory<Keyword> {
-            private val regex = Regex("(PRINT|IF|THEN|GOTO|INPUT|LET|GOSUB|RETURN|RND|ASM)")
+            private val regex = Regex("PRINT|IF|THEN|GOTO|INPUT|LET|GOSUB|RETURN|END|RND|ASM")
             override fun tryGet(input: String): Pair<String, Keyword>? {
                 val matchResult = regex.matchAt(input, 0)?.value ?: return null
                 return Pair(input.substring(matchResult.length).trim(), Keyword.valueOf(matchResult))
             }
         }
     }
+
     enum class RelOp(val operation: (Short, Short) -> Boolean) : Token<RelOp> {
         GT({ p: Short, q: Short -> p > q }), LT({ p: Short, q: Short -> p < q }), EQ({ p: Short, q: Short -> p == q }),
         NE({ p: Short, q: Short -> p != q }), GE({ p: Short, q: Short -> p >= q }), LE({ p: Short, q: Short -> p <= q });
 
         override val value = this
-        val not: RelOp get() = when (this) {
-            GT -> LE
-            LT -> GE
-            EQ -> NE
-            NE -> EQ
-            GE -> LT
-            LE -> GT
-        }
+        val not: RelOp
+            get() = when (this) {
+                GT -> LE
+                LT -> GE
+                EQ -> NE
+                NE -> EQ
+                GE -> LT
+                LE -> GT
+            }
 
         companion object : TokenFactory<RelOp> {
-            private val regex = Regex("(>=?|<=?|[=!]=)")
+            private val regex = Regex(">=?|<=?|[=!]=")
             override fun tryGet(input: String): Pair<String, RelOp>? {
                 val matchResult = regex.matchAt(input, 0)?.value ?: return null
                 return Pair(input.substring(matchResult.length).trim(), RelOp.fromString(matchResult)!!)
             }
-            private fun fromString(input: String) = when(input) {
+
+            private fun fromString(input: String) = when (input) {
                 ">" -> GT
                 "<" -> LT
                 "==" -> EQ
@@ -80,16 +89,24 @@ sealed interface Token<T> {
             }
         }
     }
+
     data class Str(override val value: String) : Token<String> {
         companion object : TokenFactory<Str> {
             private val regex = Regex("\".*?\"", RegexOption.DOT_MATCHES_ALL)
             override fun tryGet(input: String): Pair<String, Str>? {
                 val matchResult = regex.matchAt(input, 0)?.value ?: return null
-                return Pair(input.substring(matchResult.length).trim(), Str(matchResult.substring(1, matchResult.length - 1)))
+                return Pair(
+                    input.substring(matchResult.length).trim(),
+                    Str(matchResult.substring(1, matchResult.length - 1))
+                )
             }
         }
     }
+
     data class ID(override val value: Char) : Token<Char> {
+        // future compatibility
+        constructor(s: String) : this(if (s.length != 1) throw LexerError("Invalid identifier: $s") else s[0])
+
         companion object : TokenFactory<ID> {
             override fun tryGet(input: String): Pair<String, ID>? {
                 val id = run {
@@ -99,9 +116,16 @@ sealed interface Token<T> {
                 }
                 return Pair(input.substring(1).trim(), ID(id))
             }
+
+            // future compatibility
+            val regex = Regex("[a-z]")
         }
     }
+
     data class Label(override val value: Char) : Token<Char> {
+        // future compatibility
+        constructor(s: String) : this(if (s.length != 1) throw LexerError("Invalid label: $s") else s[0])
+
         companion object : TokenFactory<Label> {
             override fun tryGet(input: String): Pair<String, Label>? {
                 val label = run {
@@ -111,41 +135,52 @@ sealed interface Token<T> {
                 }
                 return Pair(input.substring(1).trim(), Label(label))
             }
+
+            // future compatibility
+            val regex = Regex("[a-z]")
         }
     }
+
     // TODO these should be data objects when that becomes a thing
     object LeftParen : Token<LeftParen>, TokenFactory<LeftParen> {
         override val value = this
         override fun tryGet(input: String): Pair<String, LeftParen>? = tryGet(input, '(', this)
     }
+
     object RightParen : Token<RightParen>, TokenFactory<RightParen> {
         override val value = this
         override fun tryGet(input: String): Pair<String, RightParen>? = tryGet(input, ')', this)
     }
+
     object Comma : Token<Comma>, TokenFactory<Comma> {
         override val value = this
         override fun tryGet(input: String): Pair<String, Comma>? = tryGet(input, ',', this)
     }
+
     object EqAssign : Token<EqAssign>, TokenFactory<EqAssign> {
         override val value = this
         override fun tryGet(input: String): Pair<String, EqAssign>? = tryGet(input, '=', this)
     }
+
     object EOF : Token<EOF> {
         override val value = this
     }
-    
+
     sealed interface TokenFactory<T : Token<*>> {
         fun tryGet(input: String): Pair<String, T>?
+
         companion object {
             val all = listOf(Number, ArithmeticOp, Keyword, RelOp, Str, ID, Label, LeftParen, RightParen, Comma, EqAssign)
         }
     }
-    
+
     companion object {
+        /**
+         * An implementation of a single-character token factory.
+         */
         @Suppress("NOTHING_TO_INLINE")
         private inline fun <T> tryGet(input: String, charToCheck: Char, objToReturn: T): Pair<String, T>?
-                where T  : Token<T>,
-                T : TokenFactory<T> {
+                where T : Token<T>, T : TokenFactory<T> {
             if (input[0] != charToCheck) return null
             return Pair(input.substring(1).trim(), objToReturn)
         }
