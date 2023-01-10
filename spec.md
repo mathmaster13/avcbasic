@@ -118,6 +118,9 @@ let's go back now!
 done
 ```
 
+### END
+`END` immediately terminates the program. This statement is implicitly inserted at the end of each program.
+
 ### ASM
 `ASM` takes in a string of assembly and emits it verbatim to the output file.
 There are no sanity checks for assembly, so use this with caution.
@@ -144,6 +147,21 @@ ASM "))" // end macro definition
 ASM "%printNewlineTwice" // calls PRINT "" twice
 ```
 
+#### Using avcbasic Labels in ASM
+ASM code can use avcbasic labels by prepending `AVCBASIC_` to the label name.
+For example, `ASM "LIT2 .absc(AVCBASIC_a) JMP2"` is equivalent to `GOTO a`.
+
+#### Using ASM labels in avcbasic
+avcbasic can use ASM labels only if they are of the form `AVCBASIC_$L`, where `$L` represents a valid avcbasic label.
+For example, a label defined with `ASM ".lbl(AVCBASIC_a)"` can be jumped to with `GOTO a`.
+
+#### Forbidden ASM labels
+A compile-time error occurs if an `ASM` block defines a label that starts with `AVCBINTERNAL_`.
+These labels are reserved for the compiler.
+
+Note that *jumping* to labels with this prefix is allowed, but not encouraged,
+since the compiler can change its internal labels at any time without warning.
+
 # Formal Grammar
 `number` is defined as the regex `[0-9]+`.
 `string` is defined as the regex `".*?"`, where `.` matches any character including line separators.
@@ -157,7 +175,7 @@ command = "PRINT", (string | expression), { ',', (string | expression) }
     | ("GOTO" | "GOSUB"), label
     | "INPUT", var, { ',', var }
     | "LET", var, '=', expression
-    | "RETURN"
+    | "RETURN" | "END"
     | "ASM", string
 ;
 var = 'A' | 'B' | ... | 'Z';
