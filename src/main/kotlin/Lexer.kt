@@ -1,6 +1,9 @@
 package io.github.mathmaster13.avcbasic
 
-typealias TokenList = ArrayList<Token<*>>
+@JvmInline
+value class TokenList @PublishedApi internal constructor(private val list: ArrayList<Token<*>>) : MutableList<Token<*>> by list {
+    constructor() : this(ArrayList())
+}
 
 class Lexer(private var code: String) {
     val tokens = TokenList()

@@ -1,7 +1,7 @@
 package io.github.mathmaster13.avcbasic
 
 class Parser(private val tokens: TokenList) {
-    var index = 0 // All functions move the index to the next unprocessed token upon completion.
+    private var index = 0 // All functions move the index to the next unprocessed token upon completion.
     fun parse(): Ast.Program {
         val ast = Ast.Program(AstList())
         while (index < tokens.size) {

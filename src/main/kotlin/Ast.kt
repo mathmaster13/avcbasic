@@ -1,12 +1,35 @@
 package io.github.mathmaster13.avcbasic
 
-typealias AstList = ArrayList<Ast>
+@JvmInline
+value class AstList @PublishedApi internal constructor(private val list: ArrayList<Ast>) : MutableList<Ast> by list {
+    constructor() : this(ArrayList())
+}
+
+@Suppress("NOTHING_TO_INLINE")
+inline fun astListOf(vararg elements: Ast): AstList = AstList(arrayListOf(*elements))
+
+// future compatibility with Variables
+//private val Ast.allNodes
+//    get(): AstList {
+//        val list = AstList()
+//        children?.forEach {
+//            list += it
+//            list += it.allNodes
+//        }
+//        return list
+//    }
 
 sealed interface Ast {
     fun visit(): String
     fun evaluate(): Ast = this // constant folding
 
-    data class Program(val children: AstList) : Ast {
+    /**
+     * A list of all ASTs that this AST contains. If this val is `null`, the AST branch ends.
+     */
+    val children: AstList? get() = null
+
+    @JvmInline
+    value class Program(override val children: AstList) : Ast {
         override fun evaluate(): Ast {
             evaluateAll(children)
             // optimize away redundant END statements at the end of a program
@@ -35,6 +58,8 @@ sealed interface Ast {
     }
 
     data class BinOp(var left: Ast, val op: Token.ArithmeticOp, var right: Ast) : Ast {
+        override val children get() = astListOf(left, right)
+
         override fun evaluate(): Ast {
             left = left.evaluate()
             right = right.evaluate()
@@ -55,7 +80,11 @@ sealed interface Ast {
                 Token.ArithmeticOp.SUBTRACT -> "SEC SBC2"
                 else -> run {
                     val (sr1, sr2, multLabel) = nextLabels
-                    """OVR2 SWP POP OVR XOR LIT #07 SFT LIT #01 XOR LIT #00 SWP2 ROT2 ${removeSign(sr1)} SWP2 ${removeSign(sr2)}
+                    """OVR2 SWP POP OVR XOR LIT #07 SFT LIT #01 XOR LIT #00 SWP2 ROT2 ${removeSign(sr1)} SWP2 ${
+                        removeSign(
+                            sr2
+                        )
+                    }
                     ${
                         when (op) {
                             Token.ArithmeticOp.MULTIPLY -> "MUL2"
@@ -82,6 +111,8 @@ sealed interface Ast {
     }
 
     data class RelOp(var left: Ast, val op: Token.RelOp, var right: Ast) : Ast {
+        override val children get() = astListOf(left, right)
+
         override fun evaluate(): Ast {
             left.evaluate()
             right.evaluate()
@@ -105,11 +136,14 @@ sealed interface Ast {
         inline fun not(): Ast = copy(op = this.op.not)
     }
 
-    data class Bool(val value: Boolean) : Ast { // ONLY for boolean constant folding
+    @JvmInline
+    value class Bool(val value: Boolean) : Ast { // ONLY for boolean constant folding
         override fun visit(): String = throw AssertionError("Boolean AST nodes should never appear in a final AST.")
     }
 
     data class UnaryOp(var operand: Ast, val op: Token.ArithmeticOp) : Ast {
+        override val children get() = astListOf(operand)
+
         override fun evaluate(): Ast {
             operand = operand.evaluate()
             if (operand is Num) return when (op) {
@@ -129,18 +163,21 @@ sealed interface Ast {
         }"
     }
 
-    data class Num(val value: Short) : Ast {
+    @JvmInline
+    value class Num(val value: Short) : Ast {
         override fun visit(): String {
             val asString = value.toUShort().toString(16).padStart(4, '0')
             return "LIT2 #${asString.substring(0, 2)} #${asString.substring(2)}"
         }
     }
 
-    data class Str(val value: String) : Ast {
+    @JvmInline
+    value class Str(val value: String) : Ast {
         override fun visit(): Nothing = throw AssertionError("Str.visit should be unreachable")
     }
 
-    data class Var(val value: Token.ID) : Ast { // only for use in expressions, not assignments
+    @JvmInline
+    value class Var(val value: Token.ID) : Ast { // only for use in expressions, not assignments
         override fun visit(): String {
             if (value !in usedVars.keys) throw UninitializedVariableException("Variable ${value.value} used before initialization")
             val addr = usedVars[value]!!
@@ -155,6 +192,14 @@ sealed interface Ast {
     }
 
     data class LabeledStatement(val label: LabelDirective?, var statement: Ast) : Ast {
+        override val children
+            get(): AstList {
+                val a = AstList()
+                if (label != null) a += label
+                a += statement
+                return a
+            }
+
         override fun evaluate(): Ast {
             statement = statement.evaluate()
             if (label == null) return statement
@@ -164,7 +209,8 @@ sealed interface Ast {
         override fun visit() = "${if (label != null) "${label.visit()}\n" else ""}${statement.visit()}"
     }
 
-    data class LabelDirective(val label: Token.Label) : Ast {
+    @JvmInline
+    value class LabelDirective(val label: Token.Label) : Ast {
         override fun visit(): String {
             checkedAdd(label)
             return ".lbl(AVCBASIC_${label.value})"
@@ -181,17 +227,18 @@ sealed interface Ast {
         class UndefinedLabelException(message: String? = null) : RuntimeException(message)
     }
 
-    data class PrintStatement(val expressions: AstList) : Ast {
+    @JvmInline
+    value class PrintStatement(override val children: AstList) : Ast {
         override fun evaluate(): Ast {
-            for (i in expressions.indices) {
-                val newExpr = expressions[i].evaluate()
-                expressions[i] = if (newExpr is Num) Str(newExpr.value.toString()) else newExpr
+            for (i in children.indices) {
+                val newExpr = children[i].evaluate()
+                children[i] = if (newExpr is Num) Str(newExpr.value.toString()) else newExpr
             }
             return this
         }
 
         override fun visit(): String {
-            return visitAllStringBuilder(expressions) { expr ->
+            return visitAllStringBuilder(children) { expr ->
                 when (expr) {
                     is Str -> expr.value.forEach {
                         append("LIT #${it.code.toUByte().toString(16).padStart(2, '0')} LIT2 #ff #09 STA\n")
@@ -217,6 +264,8 @@ sealed interface Ast {
     }
 
     data class IfStatement(var condition: Ast, var statement: Ast) : Ast {
+        override val children get() = astListOf(condition, statement)
+
         override fun evaluate(): Ast {
             condition = condition.evaluate()
             statement = statement.evaluate()
@@ -225,8 +274,7 @@ sealed interface Ast {
                 if (statement is LabeledStatement) {
                     val (label, st) = statement as LabeledStatement
                     JumpOverStatement(label!!.label, st)
-                }
-                else NoOp
+                } else NoOp
             }
             return this
         }
@@ -238,7 +286,9 @@ sealed interface Ast {
             return "${negated.visit()} LIT2 .absc($label) JNZ2\n${statement.visit()}\n.lbl($label)"
         }
 
-        private data class JumpOverStatement(val label: Token.Label, val statement: Ast): Ast {
+        private data class JumpOverStatement(val label: Token.Label, val statement: Ast) : Ast {
+            override val children = astListOf(statement)
+
             override fun visit(): String {
                 val lbl = nextLabel
                 return "LIT2 .absc($lbl) JMP2\n${statement.visit()}\n.lbl($lbl)"
@@ -263,7 +313,8 @@ sealed interface Ast {
             else "LIT2 .absc(AVCBASIC_${label.value}) ${if (subroutine) "JSR2" else "JMP2"}"
     }
 
-    data class InputStatement(val vars: ArrayList<Token.ID>) : Ast {
+    @JvmInline
+    value class InputStatement(val vars: ArrayList<Token.ID>) : Ast {
         // no evaluation needed since it's a user input function
         override fun visit(): String {
             // TODO real implementation
@@ -273,6 +324,8 @@ sealed interface Ast {
     }
 
     data class AssignStatement(val variable: Token.ID, var expression: Ast) : Ast {
+        override val children get() = astListOf(expression)
+
         override fun evaluate(): Ast {
             expression = expression.evaluate()
             // TODO convert an assignment to a no-op if a variable is unused or folded away
@@ -300,9 +353,10 @@ sealed interface Ast {
         }
     }
 
-    data class AsmDirective(val asm: String) : Ast {
+    @JvmInline
+    value class AsmDirective(val asm: String) : Ast {
         override fun evaluate(): Ast {
-            // TODO prevent string literals containing these characters from being matched
+            // TODO prevent string literals containing ".lbl" from being matched
             if (".lbl(AVCBINTERNAL_" in asm || ".label(AVCBINTERNAL_" in asm) throw UnsupportedOperationException("Assembly labels beginning with AVCBINTERNAL_ are reserved for use by the compiler and cannot be made through the ASM keyword.")
             regex.findAll(asm).map { Token.Label(it.groupValues[1]) }.forEach(LabelDirective::checkedAdd)
             return this
@@ -319,22 +373,27 @@ sealed interface Ast {
         }
     }
 
-    // TODO will be data objects
-    object Rnd : Ast {
+    data object Rnd : Ast {
         override fun visit() = "LIT2 #ff #02 LDA LIT #00"
     }
 
-    object ReturnStatement : Ast {
+    data object ReturnStatement : Ast {
         override fun visit() = "JMPr2"
     }
 
-    object EndStatement : Ast {
+    data object EndStatement : Ast {
         override fun visit(): String = "LIT #00 LIT2 #ff #0f STA #ef"
     }
 
-    object NoOp : Ast {
+    data object NoOp : Ast {
         override fun visit() = ""
     }
+
+//    /**
+//     * Represents the state of all variables in a given program.
+//     * As the AST is evaluated for constant folding, this class simulates what values a variable would have at the given program point.
+//     */
+//    private object Variables
 
     companion object {
         @Suppress("NOTHING_TO_INLINE")
